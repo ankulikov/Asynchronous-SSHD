@@ -25,8 +25,8 @@ import java.util.Map;
 import org.apache.sshd.ClientSession;
 import org.apache.sshd.client.ServerKeyVerifier;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /*
  * A ServerKeyVerifier that delegates verification to the ServerKeyVerifier found in the ClientSession metadata
@@ -37,7 +37,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class DelegatingServerKeyVerifier implements ServerKeyVerifier {
 
-	protected final Log log = LogFactory.getLog(getClass());
+	protected final Logger log = LoggerFactory.getLogger(getClass());
 
 	public boolean verifyServerKey(ClientSession sshClientSession, SocketAddress remoteAddress, PublicKey serverKey) {
 		Map<Object, Object> metadataMap = sshClientSession.getMetadataMap();

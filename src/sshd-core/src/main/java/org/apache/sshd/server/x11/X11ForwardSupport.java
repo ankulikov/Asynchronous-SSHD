@@ -37,10 +37,9 @@ import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.SshException;
 import org.apache.sshd.common.channel.ChannelOutputStream;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.server.session.ServerSession;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author <a href="mailto:dev@mina.apache.org">Apache MINA SSHD Project</a>
@@ -57,7 +56,7 @@ public class X11ForwardSupport extends IoHandlerAdapter {
      */
     public static final String ENV_DISPLAY = "DISPLAY";
 
-    protected final Log log = LogFactory.getLog(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
 
     private final ServerSession session;
     private IoAcceptor acceptor;
@@ -188,7 +187,7 @@ public class X11ForwardSupport extends IoHandlerAdapter {
                 throw new SshException("Session has been closed");
             }
             openFuture = new DefaultOpenFuture(lock);
-            LogUtils.info(log,"Send SSH_MSG_CHANNEL_OPEN on channel {0}",id);
+            log.info("Send SSH_MSG_CHANNEL_OPEN on channel {}", id);
             Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_OPEN, 0);
             buffer.putString(type);
             buffer.putInt(id);

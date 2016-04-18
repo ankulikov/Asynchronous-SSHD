@@ -24,12 +24,11 @@ import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.common.util.SecurityUtils;
 import org.bouncycastle.openssl.PEMReader;
 import org.bouncycastle.openssl.PasswordFinder;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This host key provider loads private keys from the specified files.
@@ -41,7 +40,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class FileKeyPairProvider extends AbstractKeyPairProvider {
 
-    private static final Log LOG = LogFactory.getLog(FileKeyPairProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FileKeyPairProvider.class);
 
     private String[] files;
     private PasswordFinder passwordFinder;
@@ -91,7 +90,7 @@ public class FileKeyPairProvider extends AbstractKeyPairProvider {
                     r.close();
                 }
             } catch (Exception e) {
-                LogUtils.info(LOG,"Unable to read key {0}: {1}", files[i], e);
+                LOG.info("Unable to read key {}: {}", files[i], e);
             }
         }
         return keys.toArray(new KeyPair[keys.size()]);

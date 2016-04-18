@@ -28,10 +28,9 @@ import java.util.Map;
 
 import org.apache.sshd.common.Factory;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.server.Command;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A {@link Factory} of {@link Command} that will create a new process and bridge
@@ -49,7 +48,7 @@ public class ProcessShellFactory implements Factory<Command> {
         OCrNl
     }
 
-    private static final Log LOG = LogFactory.getLog(ProcessShellFactory.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ProcessShellFactory.class);
 
     private String[] command;
     private EnumSet<TtyOptions> ttyOptions;
@@ -96,9 +95,13 @@ public class ProcessShellFactory implements Factory<Command> {
             }
             ProcessBuilder builder = new ProcessBuilder(cmds);
             if (env != null) {
-                builder.environment().putAll(env);
+                try {
+                    builder.environment().putAll(env);
+                } catch (Exception e) {
+                    LOG.info("Could not set environment for command", e);
+                }
             }
-            LogUtils.info(LOG,"Starting shell with command: '{0}' and env: {1}", builder.command(), builder.environment());
+            LOG.info("Starting shell with command: '{}' and env: {}", builder.command(), builder.environment());
             process = builder.start();
             out = new TtyFilterInputStream(process.getInputStream());
             err = new TtyFilterInputStream(process.getErrorStream());

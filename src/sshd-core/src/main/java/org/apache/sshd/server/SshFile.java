@@ -75,6 +75,12 @@ public interface SshFile {
     boolean isWritable();
 
     /**
+     * Has exec permission?
+     * @return true if the {@link SshFile} is executable by the user
+     */
+    boolean isExecutable();
+
+    /**
      * Has delete permission?
      * @return true if the {@link SshFile} is removable by the user
      */
@@ -117,8 +123,15 @@ public interface SshFile {
     boolean delete();
 
     /**
+     * Create the file.
+     * @return true if the file has been created and false if it already exist
+     * @throws java.io.IOException if something wrong happen
+     */
+    boolean create() throws IOException;
+
+    /**
      * Truncate the file to length 0.
-     * @return The size of the {@link SshFile} in bytes
+     * @throws java.io.IOException if something wrong happen
      */
     void truncate() throws IOException;
 

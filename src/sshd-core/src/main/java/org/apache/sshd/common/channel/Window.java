@@ -21,9 +21,8 @@ package org.apache.sshd.common.channel;
 import java.io.IOException;
 
 import org.apache.sshd.common.SshException;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A Window for a given channel.
@@ -36,7 +35,7 @@ import org.apache.sshd.common.util.LogUtils;
  */
 public class Window {
 
-    private final static Log log = LogFactory.getLog(Window.class);
+    private final static Logger log = LoggerFactory.getLogger(Window.class);
 
     private final AbstractChannel channel;
     private final Object lock;
@@ -121,12 +120,12 @@ public class Window {
     public void waitAndConsume(int len) throws InterruptedException, WindowClosedException {
         synchronized (lock) {
             while (size < len && !closed) {
-                LogUtils.debug(log,"Waiting for {0} bytes on {1}", len, name);
+                log.debug("Waiting for {} bytes on {}", len, name);
                 waiting = true;
                 lock.wait();
             }
             if (waiting) {
-                LogUtils.debug(log,"Space available for {0}", name);
+                log.debug("Space available for {}", name);
                 waiting = false;
             }
             if (closed) {
@@ -142,12 +141,12 @@ public class Window {
     public int waitForSpace() throws InterruptedException, WindowClosedException {
         synchronized (lock) {
             while (size == 0 && !closed) {
-                LogUtils.debug(log,"Waiting for some space on {0}", name);
+                log.debug("Waiting for some space on {}", name);
                 waiting = true;
                 lock.wait();
             }
             if (waiting) {
-                LogUtils.debug(log,"Space available for {0}", name);
+                log.debug("Space available for {}", name);
                 waiting = false;
             }
             if (closed) {
@@ -163,29 +162,6 @@ public class Window {
             if (waiting) {
                 lock.notifyAll();
             }
-        }
-    }
-    
-    public boolean consumeIfAvaliable(int len) throws InterruptedException, WindowClosedException
-    {
-        synchronized (lock) {
-            if (size < len && !closed) {
-                LogUtils.debug(log,"Waiting for {0} bytes on {1}", len, name);
-                waiting = true;
-                return false;
-            }
-            if (waiting) {
-                LogUtils.debug(log,"Space available for {0}", name);
-                waiting = false;
-            }
-            if (closed) {
-                throw new WindowClosedException();
-            }
-            size -= len;
-            if (log.isTraceEnabled()) {
-                log.trace("Consume " + name + " by " + len + " down to " + size);
-            }
-            return true;
         }
     }
 }

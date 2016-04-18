@@ -30,10 +30,9 @@ import java.security.KeyPairGenerator;
 
 import org.apache.sshd.common.keyprovider.AbstractKeyPairProvider;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.common.util.SecurityUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -42,7 +41,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public abstract class AbstractGeneratorHostKeyProvider extends AbstractKeyPairProvider {
 
-    private static final Log LOG = LogFactory.getLog(FileKeyPairProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FileKeyPairProvider.class);
 
     private String path;
     private String algorithm = "DSA";
@@ -122,7 +121,7 @@ public abstract class AbstractGeneratorHostKeyProvider extends AbstractKeyPairPr
             is = new FileInputStream(f);
             return doReadKeyPair(is);
         } catch (Exception e) {
-            LogUtils.info(LOG,"Unable to read key {0}: {1}", path, e);
+            LOG.info("Unable to read key {}: {}", path, e);
         } finally {
             close(is);
         }
@@ -135,7 +134,7 @@ public abstract class AbstractGeneratorHostKeyProvider extends AbstractKeyPairPr
             os = new FileOutputStream(f);
             doWriteKeyPair(kp, os);
         } catch (Exception e) {
-            LogUtils.info(LOG,"Unable to write key {0}: {1}", path, e);
+            LOG.info("Unable to write key {}: {}", path, e);
         } finally {
             close(os);
         }

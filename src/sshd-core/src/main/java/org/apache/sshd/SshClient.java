@@ -18,15 +18,20 @@
  */
 package org.apache.sshd;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.LinkedList;
 import java.util.Iterator;
-import java.security.InvalidKeyException;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.mina.core.future.IoFutureListener;
 import org.apache.mina.core.service.IoConnector;
@@ -41,7 +46,14 @@ import org.apache.sshd.client.future.DefaultConnectFuture;
 import org.apache.sshd.client.kex.DHG1;
 import org.apache.sshd.client.kex.DHG14;
 import org.apache.sshd.client.session.ClientSessionImpl;
-import org.apache.sshd.common.*;
+import org.apache.sshd.common.AbstractFactoryManager;
+import org.apache.sshd.common.Channel;
+import org.apache.sshd.common.Cipher;
+import org.apache.sshd.common.Compression;
+import org.apache.sshd.common.KeyExchange;
+import org.apache.sshd.common.Mac;
+import org.apache.sshd.common.NamedFactory;
+import org.apache.sshd.common.Signature;
 import org.apache.sshd.common.cipher.AES128CBC;
 import org.apache.sshd.common.cipher.AES192CBC;
 import org.apache.sshd.common.cipher.AES256CBC;
@@ -58,11 +70,9 @@ import org.apache.sshd.common.random.SingletonRandomFactory;
 import org.apache.sshd.common.session.AbstractSession;
 import org.apache.sshd.common.signature.SignatureDSA;
 import org.apache.sshd.common.signature.SignatureRSA;
-import org.apache.sshd.common.util.EventCollector;
 import org.apache.sshd.common.util.NoCloseInputStream;
 import org.apache.sshd.common.util.NoCloseOutputStream;
 import org.apache.sshd.common.util.SecurityUtils;
-import org.apache.sshd.client.PumpingMethod;
 
 /**
  * Entry point for the client side of the SSH protocol.
@@ -117,12 +127,6 @@ public class SshClient extends AbstractFactoryManager implements ClientFactoryMa
 
     private ServerKeyVerifier serverKeyVerifier;
 
-	private PumpingMethod pumpingMethod = PumpingMethod.OFF;
-	private int nioProcessorCount = 0;
-	private StreamPumperThread streamPumper = null;
-    private EventCollector eventsWaiter = null;
-	private long streamWaitTime = 100;
-
     public SshClient() {
     }
 
@@ -143,32 +147,22 @@ public class SshClient extends AbstractFactoryManager implements ClientFactoryMa
     }
 
     public void start() {
-		if (nioProcessorCount <= 0)
-			connector = new NioSocketConnector();
-		else
-			connector = new NioSocketConnector(nioProcessorCount);
+        connector = createAcceptor();
 
-        SessionFactory handler = sessionFactory;
-        if (handler == null) {
-            handler = new SessionFactory();
-            sessionFactory=handler;
+        if (sessionFactory == null) {
+            sessionFactory = new SessionFactory();
         }
-        handler.setClient(this);
-        connector.setHandler(handler);
+        sessionFactory.setClient(this);
+        connector.setHandler(sessionFactory);
+    }
 
-        if (pumpingMethod == PumpingMethod.SELF) {
-            eventsWaiter=new EventCollector();
-            sessionFactory.setPumpListener(eventsWaiter.getSetMethod());
-			streamPumper = new StreamPumperThread();
-            streamPumper.start();
-		}
+    protected NioSocketConnector createAcceptor() {
+        return new NioSocketConnector(getNioWorkers());
     }
 
     public void stop() {
         connector.dispose();
         connector = null;
-		if (streamPumper != null)
-			streamPumper.close();
     }
 
     public ConnectFuture connect(String host, int port) throws Exception {
@@ -425,63 +419,4 @@ public class SshClient extends AbstractFactoryManager implements ClientFactoryMa
         }
     }
 
-	public void setNioProcessorCount(int nioProcessorCount) {
-		this.nioProcessorCount = nioProcessorCount;
-	}
-
-	public int getNioProcessorCount() {
-		return nioProcessorCount;
-	}
-
-	private class StreamPumperThread extends Thread {
-		private boolean isClosed = false;
-
-		public StreamPumperThread() {
-			super("[SSHD] StreamPumperThread");
-			setDaemon(true);
-		}
-
-		public synchronized void close() {
-			isClosed = true;
-		}
-
-		@Override
-		public void run() {
-			while (!isClosed && !isInterrupted()) {
-				try {
-					if (!pump()) {
-						eventsWaiter.await(streamWaitTime);
-					}
-				} catch (InterruptedException e) {
-					close();
-				}
-			}
-		}
-	}
-
-	public PumpingMethod getPumpingMethod() {
-		return pumpingMethod;
-	}
-
-	public void setPumpingMethod(PumpingMethod pumpingMethod) {
-		if (connector != null)
-			throw new IllegalArgumentException(
-					"Set Pumping method before starting SshClient.");
-		this.pumpingMethod = pumpingMethod;
-	}
-
-	public boolean pump() {
-		synchronized (sessionFactory.getSessions()) {
-			boolean dataTransferred = false;
-			for (ClientSession session : sessionFactory.getSessions()) {
-				if (session.getPumpingMethod() == PumpingMethod.PARENT)
-					dataTransferred = dataTransferred || session.pump();
-			}
-			return dataTransferred;
-		}
-	}
-	
-	public void setStreamWaitTime(long streamWaitTime) {
-		this.streamWaitTime = streamWaitTime;
-	}
 }

@@ -19,6 +19,8 @@
 package org.apache.sshd.common.session;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,6 +41,7 @@ import org.apache.sshd.common.Mac;
 import org.apache.sshd.common.NamedFactory;
 import org.apache.sshd.common.Random;
 import org.apache.sshd.common.Session;
+import org.apache.sshd.common.SessionListener;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.SshException;
 import org.apache.sshd.common.future.CloseFuture;
@@ -47,9 +50,8 @@ import org.apache.sshd.common.future.SshFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.util.Buffer;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The AbstractSession handles all the basic SSH protocol such as key exchange, authentication,
@@ -72,8 +74,8 @@ public abstract class AbstractSession implements Session {
      * and {@link #attachSession(IoSession, AbstractSession)}.
      */
     public static final String SESSION = "org.apache.sshd.session";
-    /** Our Log */
-    protected final Log log = LogFactory.getLog(getClass());
+    /** Our logger */
+    protected final Logger log = LoggerFactory.getLogger(getClass());
     /** The factory manager used to retrieve factories of Ciphers, Macs and other objects */
     protected final FactoryManager factoryManager;
     /** The underlying MINA session */
@@ -94,6 +96,9 @@ public abstract class AbstractSession implements Session {
     protected final Map<Integer, Channel> channels = new ConcurrentHashMap<Integer, Channel>();
     /** Next channel identifier */
     protected int nextChannelId;
+
+    /** Session listener */
+    protected final List<SessionListener> listeners = new ArrayList<SessionListener>();
 
     //
     // Key exchange support
@@ -129,6 +134,7 @@ public abstract class AbstractSession implements Session {
     protected final Object encodeLock = new Object();
     protected final Object decodeLock = new Object();
     protected final Map<AttributeKey<?>, Object> attributes = new ConcurrentHashMap<AttributeKey<?>, Object>();
+    protected String username;
 
     /**
      * Create a new session.
@@ -272,6 +278,7 @@ public abstract class AbstractSession implements Session {
      * The call will not block until the mina session is actually closed.
      */
     public CloseFuture close(final boolean immediately) {
+	    final Session s = this;
         class IoSessionCloser implements IoFutureListener {
             public void operationComplete(IoFuture future) {
                 synchronized (lock) {
@@ -279,18 +286,26 @@ public abstract class AbstractSession implements Session {
                     closeFuture.setClosed();
                     lock.notifyAll();
                 }
+
+                // Fire 'close' event
+                final ArrayList<SessionListener> l =
+                        new ArrayList<SessionListener>(listeners);
+
+                for (SessionListener sl : l) {
+                    sl.sessionClosed(s);
+                }
             }
-        };
+        }
         synchronized (lock) {
             if (!closing) {
                 try {
                     closing = true;
                     log.info("Closing session");
-                    Channel[] channelToClose = channels.values().toArray(new Channel[0]);
+                    Channel[] channelToClose = channels.values().toArray(new Channel[channels.values().size()]);
                     if (channelToClose.length > 0) {
                         final AtomicInteger latch = new AtomicInteger(channelToClose.length);
                         for (Channel channel : channelToClose) {
-                            LogUtils.debug(log,"Closing channel {0}", channel.getId());
+                            log.debug("Closing channel {}", channel.getId());
                             channel.close(immediately).addListener(new SshFutureListener() {
                                 public void operationComplete(SshFuture sshFuture) {
                                     if (latch.decrementAndGet() == 0) {
@@ -391,7 +406,7 @@ public abstract class AbstractSession implements Session {
             int off = buffer.rpos() - 5;
             // Debug log the packet
             if (log.isTraceEnabled()) {
-                log.trace("Sending packet #"+seqo+": "+buffer.printHex());
+                log.trace("Sending packet #{}: {}", seqo, buffer.printHex());
             }
             // Compress the packet if needed
             if (outCompression != null && (authed || !outCompression.isDelayed())) {
@@ -460,7 +475,7 @@ public abstract class AbstractSession implements Session {
                     decoderLength = decoderBuffer.getInt();
                     // Check packet length validity
                     if (decoderLength < 5 || decoderLength > (256 * 1024)) {
-                        LogUtils.info(log,"Error decoding packet (invalid length) {0}", decoderBuffer.printHex());
+                        log.info("Error decoding packet (invalid length) {}", decoderBuffer.printHex());
                         throw new SshException(SshConstants.SSH2_DISCONNECT_PROTOCOL_ERROR,
                                                "Invalid packet length: " + decoderLength);
                     }
@@ -517,7 +532,7 @@ public abstract class AbstractSession implements Session {
                         buf = decoderBuffer;
                     }
                     if (log.isTraceEnabled()) {
-                        log.trace("Received packet #"+seqi+": "+ buf.printHex());
+                        log.trace("Received packet #{}: {}", seqi, buf.printHex());
                     }
                     // Process decoded packet
                     handleMessage(buf);
@@ -906,7 +921,7 @@ public abstract class AbstractSession implements Session {
 
     protected void channelOpenConfirmation(Buffer buffer) throws IOException {
         Channel channel = getChannel(buffer);
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_OPEN_CONFIRMATION on channel {0}", channel.getId());
+        log.info("Received SSH_MSG_CHANNEL_OPEN_CONFIRMATION on channel {}", channel.getId());
         int recipient = buffer.getInt();
         int rwsize = buffer.getInt();
         int rmpsize = buffer.getInt();
@@ -915,7 +930,7 @@ public abstract class AbstractSession implements Session {
 
     protected void channelOpenFailure(Buffer buffer) throws IOException {
         AbstractClientChannel channel = (AbstractClientChannel) getChannel(buffer);
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_OPEN_FAILURE on channel {0}", channel.getId());
+        log.info("Received SSH_MSG_CHANNEL_OPEN_FAILURE on channel {}", channel.getId());
         channels.remove(channel.getId());
         channel.handleOpenFailure(buffer);
     }
@@ -1071,4 +1086,29 @@ public abstract class AbstractSession implements Session {
         return (T)attributes.put(key, value);
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public void addListener(SessionListener listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException();
+        }
+
+        synchronized (this.listeners) {
+            this.listeners.add(listener);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public void removeListener(SessionListener listener) {
+        synchronized (this.listeners) {
+            this.listeners.remove(listener);
+        }
+    }
 }

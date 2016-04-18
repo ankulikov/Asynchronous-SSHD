@@ -46,10 +46,7 @@ import org.apache.sshd.common.future.CloseFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.session.AbstractSession;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
-import org.apache.sshd.common.util.SshListener;
 import org.apache.sshd.server.channel.OpenChannelException;
-import org.apache.sshd.client.PumpingMethod;
 
 /**
  * TODO Add javadoc
@@ -65,8 +62,7 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
     private State state = State.ReceiveKexInit;
     private UserAuth userAuth;
     private AuthFuture authFuture;
-    private PumpingMethod pumpingMethod=PumpingMethod.OFF;
-    private SshListener pumpingListener=null;
+
     /**
      * For clients to store their own metadata
      */
@@ -171,27 +167,18 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
 
     public ChannelShell createShellChannel() throws Exception {
         ChannelShell channel = new ChannelShell();
-        channel.setPumpingListener(pumpingListener);
-        if(pumpingMethod==PumpingMethod.PARENT || pumpingMethod==PumpingMethod.SELF)
-            channel.setPumpingMethod(PumpingMethod.PARENT);
         registerChannel(channel);
         return channel;
     }
 
     public ChannelExec createExecChannel(String command) throws Exception {
         ChannelExec channel = new ChannelExec(command);
-        channel.setPumpingListener(pumpingListener);
-        if(pumpingMethod==PumpingMethod.PARENT || pumpingMethod==PumpingMethod.SELF)
-            channel.setPumpingMethod(PumpingMethod.PARENT);
         registerChannel(channel);
         return channel;
     }
 
     public ChannelSubsystem createSubsystemChannel(String subsystem) throws Exception {
         ChannelSubsystem channel = new ChannelSubsystem(subsystem);
-        channel.setPumpingListener(pumpingListener);
-        if(pumpingMethod==PumpingMethod.PARENT || pumpingMethod==PumpingMethod.SELF)
-            channel.setPumpingMethod(PumpingMethod.PARENT);
         registerChannel(channel);
         return channel;
     }
@@ -214,24 +201,24 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
 
     protected void doHandleMessage(Buffer buffer) throws Exception {
         SshConstants.Message cmd = buffer.getCommand();
-        LogUtils.debug(log,"Received packet {0}", cmd);
+        log.debug("Received packet {}", cmd);
         switch (cmd) {
             case SSH_MSG_DISCONNECT: {
                 int code = buffer.getInt();
                 String msg = buffer.getString();
-                LogUtils.info(log,"Received SSH_MSG_DISCONNECT (reason={0}, msg={1})", code, msg);
+                log.info("Received SSH_MSG_DISCONNECT (reason={}, msg={})", code, msg);
                 close(false);
                 break;
             }
             case SSH_MSG_UNIMPLEMENTED: {
                 int code = buffer.getInt();
-                LogUtils.info(log,"Received SSH_MSG_UNIMPLEMENTED #{0}", code);
+                log.info("Received SSH_MSG_UNIMPLEMENTED #{}", code);
                 break;
             }
             case SSH_MSG_DEBUG: {
                 boolean display = buffer.getBoolean();
                 String msg = buffer.getString();
-                LogUtils.info(log,"Received SSH_MSG_DEBUG (display={0}) '{1}'", display, msg);
+                log.info("Received SSH_MSG_DEBUG (display={}) '{}'", display, msg);
                 break;
             }
             case SSH_MSG_IGNORE:
@@ -288,6 +275,7 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
                         switch (userAuth.next(buffer)) {
                              case Success:
                                  authFuture.setAuthed(true);
+                                 username = userAuth.getUsername();
                                  authed = true;
                                  setState(State.Running);
                                  break;
@@ -395,7 +383,7 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
         if (serverVersion == null) {
             return false;
         }
-        LogUtils.info(log,"Server version string: {0}", serverVersion);
+        log.info("Server version string: {}", serverVersion);
         if (!serverVersion.startsWith("SSH-2.0-")) {
             throw new SshException(SshConstants.SSH2_DISCONNECT_PROTOCOL_VERSION_NOT_SUPPORTED,
                                    "Unsupported protocol version: " + serverVersion);
@@ -442,7 +430,7 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
         final int rwsize = buffer.getInt();
         final int rmpsize = buffer.getInt();
 
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_OPEN {0}", type);
+        log.info("Received SSH_MSG_CHANNEL_OPEN {}", type);
 
         if (closing) {
             Buffer buf = createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_OPEN_FAILURE, 0);
@@ -502,38 +490,4 @@ public class ClientSessionImpl extends AbstractSession implements ClientSession 
 		return metadataMap;
 	}
 
-    public PumpingMethod getPumpingMethod()
-    {
-        return pumpingMethod;
-    }
-
-    public void setPumpingMethod(PumpingMethod pumpingMethod)
-    {
-        if(pumpingMethod==PumpingMethod.SELF)
-            throw new IllegalArgumentException("Not Implemented. Session Pumping thread can be started here.");
-        this.pumpingMethod=pumpingMethod;
-    }
-
-    public boolean pump()
-    {
-        if (!closing)
-        {
-            boolean dataTransferred = false;
-            for (Channel channel : channels.values())
-            {
-                ClientChannel clientChannel = (ClientChannel) channel;
-                if (clientChannel.getPumpingMethod() == PumpingMethod.PARENT)
-                {
-                    dataTransferred = dataTransferred || clientChannel.pump();
-                }
-            }
-            return dataTransferred;
-        }
-        return false;
-    }
-
-    public void setPumpingListener(SshListener pumpingListener)
-    {
-        this.pumpingListener = pumpingListener;
-    }
 }

@@ -19,11 +19,10 @@
 
 package org.apache.sshd.server.filesystem;
 
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.server.SshFile;
 import org.apache.sshd.server.FileSystemView;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
@@ -37,8 +36,8 @@ import java.io.File;
  */
 public class NativeFileSystemView implements FileSystemView {
 
-    private final Log LOG = LogFactory
-    .getLog(NativeFileSystemView.class);
+    private final Logger LOG = LoggerFactory
+    .getLogger(NativeFileSystemView.class);
 
 
     // the first and the last character will always be '/'
@@ -70,17 +69,24 @@ public class NativeFileSystemView implements FileSystemView {
         this.userName = userName;
 
         // add last '/' if necessary
-        LogUtils.debug(LOG,"Native filesystem view created for user \"{0}\" with root \"{1}\"", userName, currDir);
+        LOG.debug("Native filesystem view created for user \"{}\" with root \"{}\"", userName, currDir);
     }
 
     /**
      * Get file object.
      */
     public SshFile getFile(String file) {
+        return getFile(currDir, file);
+    }
 
+    public SshFile getFile(SshFile baseDir, String file) {
+        return getFile(baseDir.getAbsolutePath(), file);
+    }
+
+    protected SshFile getFile(String dir, String file) {
         // get actual file object
         String physicalName = NativeSshFile.getPhysicalName("/",
-                currDir, file, caseInsensitive);
+                dir, file, caseInsensitive);
         File fileObj = new File(physicalName);
 
         // strip the root directory and return

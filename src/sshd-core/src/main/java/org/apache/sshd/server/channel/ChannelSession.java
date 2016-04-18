@@ -41,7 +41,6 @@ import org.apache.sshd.common.future.SshFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.util.Buffer;
 import org.apache.sshd.common.util.IoUtils;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.common.util.LoggingFilterOutputStream;
 import org.apache.sshd.server.*;
 import org.apache.sshd.server.FileSystemFactory;
@@ -189,9 +188,9 @@ public class ChannelSession extends AbstractServerChannel {
     }
 
     public void handleRequest(Buffer buffer) throws IOException {
-        LogUtils.info(log, "Received SSH_MSG_CHANNEL_REQUEST on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_REQUEST on channel {}", id);
         String type = buffer.getString();
-        LogUtils.info(log, "Received channel request: {0}", type);
+        log.info("Received channel request: {}", type);
         if (!handleRequest(type, buffer)) {
             buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_FAILURE, 0);
             buffer.putInt(recipient);
@@ -200,8 +199,10 @@ public class ChannelSession extends AbstractServerChannel {
     }
 
     protected void doWriteData(byte[] data, int off, int len) throws IOException {
-        shellIn.write(data, off, len);
-        shellIn.flush();
+        if (shellIn != null) {
+            shellIn.write(data, off, len);
+            shellIn.flush();
+        }
     }
 
     protected void doWriteExtendedData(byte[] data, int off, int len) throws IOException {
@@ -277,7 +278,7 @@ public class ChannelSession extends AbstractServerChannel {
         String name = buffer.getString();
         String value = buffer.getString();
         addEnvVariable(name, value);
-        LogUtils.debug(log,"env for channel {0}: {1} = {2}", id, name, value);
+        log.debug("env for channel {}: {} = {}", new Object[] { id, name, value });
         if (wantReply) {
             buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_SUCCESS, 0);
             buffer.putInt(recipient);
@@ -303,8 +304,7 @@ public class ChannelSession extends AbstractServerChannel {
             getEnvironment().getPtyModes().put(mode, val);
         }
         if (log.isDebugEnabled()) {
-            LogUtils.debug(log,"pty for channel {0}: term={1}, size=({2} - {3}), pixels=({4}, {5}), modes=[{6}]",
-                    id, term, tColumns, tRows, tWidth, tHeight, getEnvironment().getPtyModes());
+            log.debug("pty for channel {}: term={}, size=({} - {}), pixels=({}, {}), modes=[{}]", new Object[] { id, term, tColumns, tRows, tWidth, tHeight, getEnvironment().getPtyModes() });
         }
         addEnvVariable(Environment.ENV_TERM, term);
         addEnvVariable(Environment.ENV_COLUMNS, Integer.toString(tColumns));
@@ -323,7 +323,7 @@ public class ChannelSession extends AbstractServerChannel {
         int tRows = buffer.getInt();
         int tWidth = buffer.getInt();
         int tHeight = buffer.getInt();
-        LogUtils.debug(log, "window-change for channel {0}: ({1} - {2}), ({3}, {4})", id, tColumns, tRows, tWidth, tHeight);
+        log.debug("window-change for channel {}: ({} - {}), ({}, {})", new Object[] { id, tColumns, tRows, tWidth, tHeight });
 
         final StandardEnvironment e = getEnvironment();
         e.set(Environment.ENV_COLUMNS, Integer.toString(tColumns));
@@ -341,7 +341,7 @@ public class ChannelSession extends AbstractServerChannel {
     protected boolean handleSignal(Buffer buffer) throws IOException {
         boolean wantReply = buffer.getBoolean();
         String name = buffer.getString();
-        LogUtils.debug(log,"Signal received on channel {0}: {1}", id, name);
+        log.debug("Signal received on channel {}: {}", id, name);
 
         final Signal signal = Signal.get(name);
         if (signal != null) {
@@ -382,7 +382,7 @@ public class ChannelSession extends AbstractServerChannel {
             return false;
         }
         if (log.isInfoEnabled()) {
-            log.info("Executing command: "+commandLine);
+            log.info("Executing command: {}", commandLine);
         }
         try {
             command = ((ServerSession) session).getServerFactoryManager().getCommandFactory().createCommand(commandLine);
@@ -423,7 +423,7 @@ public class ChannelSession extends AbstractServerChannel {
         return true;
     }
 
-    protected void prepareCommand() {
+    protected void prepareCommand() throws IOException {
         // Add the user
         addEnvVariable(Environment.ENV_USER, ((ServerSession) session).getUsername());
         // If the shell wants to be aware of the session, let's do that
@@ -433,7 +433,7 @@ public class ChannelSession extends AbstractServerChannel {
         // If the shell wants to be aware of the file system, let's do that too
         if (command instanceof FileSystemAware) {
             FileSystemFactory factory = ((ServerSession) session).getServerFactoryManager().getFileSystemFactory();
-            ((FileSystemAware) command).setFileSystemView(factory.createFileSystemView(((ServerSession) session).getUsername()));
+            ((FileSystemAware) command).setFileSystemView(factory.createFileSystemView(session));
         }
         out = new ChannelOutputStream(this, remoteWindow, log, SshConstants.Message.SSH_MSG_CHANNEL_DATA);
         err = new ChannelOutputStream(this, remoteWindow, log, SshConstants.Message.SSH_MSG_CHANNEL_EXTENDED_DATA);
@@ -536,10 +536,12 @@ public class ChannelSession extends AbstractServerChannel {
     }
 
     protected void closeShell(int exitValue) throws IOException {
-        sendEof();
-        sendExitStatus(exitValue);
-        // TODO: We should wait for all streams to be consumed before closing the channel
-        close(false);
+        if (!closing) {
+            sendEof();
+            sendExitStatus(exitValue);
+            // TODO: We should wait for all streams to be consumed before closing the channel
+            close(false);
+        }
     }
 
 }

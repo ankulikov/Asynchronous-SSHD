@@ -25,9 +25,8 @@ import org.apache.sshd.client.session.ClientSessionImpl;
 import org.apache.sshd.common.KeyPairProvider;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.security.PublicKey;
@@ -39,7 +38,7 @@ import java.util.Iterator;
  */
 public class UserAuthAgent implements UserAuth {
 
-    protected final Log log = LogFactory.getLog(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
 
     private final ClientSessionImpl session;
     private final String username;
@@ -54,6 +53,10 @@ public class UserAuthAgent implements UserAuth {
         this.agent = agent;
         keys = agent.getIdentities().iterator();
         sendNextKey();
+    }
+
+    public String getUsername() {
+        return username;
     }
 
     protected void sendNextKey() throws IOException {
@@ -99,7 +102,7 @@ public class UserAuthAgent implements UserAuth {
 
     public Result next(Buffer buffer) throws IOException {
         SshConstants.Message cmd = buffer.getCommand();
-        LogUtils.info(log,"Received {0}", cmd);
+        log.info("Received {}", cmd);
         if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_SUCCESS) {
             return Result.Success;
         } if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_FAILURE) {

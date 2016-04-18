@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.logging.Log;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -34,7 +34,7 @@ import org.apache.commons.logging.Log;
  */
 public abstract class AbstractFactoryManager implements FactoryManager {
 
-    private final Log log = LogFactory.getLog(getClass());
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     protected Map<String,String> properties = new HashMap<String,String>();
     protected List<NamedFactory<KeyExchange>> keyExchangeFactories;
@@ -142,4 +142,24 @@ public abstract class AbstractFactoryManager implements FactoryManager {
     public void setChannelFactories(List<NamedFactory<Channel>> channelFactories) {
         this.channelFactories = channelFactories;
     }
+
+    public int getNioWorkers() {
+        String nioWorkers = getProperties().get(NIO_WORKERS);
+        if (nioWorkers != null && nioWorkers.length() > 0) {
+            int nb = Integer.parseInt(nioWorkers);
+            if (nb > 0) {
+                return nb;
+            }
+        }
+        return DEFAULT_NIO_WORKERS;
+    }
+
+    public void setNioWorkers(int nioWorkers) {
+        if (nioWorkers > 0) {
+            getProperties().put(NIO_WORKERS, Integer.toString(nioWorkers));
+        } else {
+            getProperties().remove(NIO_WORKERS);
+        }
+    }
+
 }

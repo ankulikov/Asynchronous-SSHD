@@ -42,18 +42,14 @@ public interface FactoryManager {
     public static final String MAX_PACKET_SIZE = "packet-size";
 
     /**
-     * Key used to retrieve the value in the configuration properties map
-     * of the maximum number of failed authentication requests before the
-     * server closes the connection.
+     * Number of NIO worker threads to use.
      */
-    public static final String MAX_AUTH_REQUESTS = "max-auth-requests";
+    public static final String NIO_WORKERS = "nio-workers";
 
     /**
-     * Key used to retrieve the value of the timeout after which
-     * the server will close the connection if the client has not been
-     * authenticated.
+     * Default number of worker threads to use.
      */
-    public static final String AUTH_TIMEOUT = "auth-timeout";
+    public static final int DEFAULT_NIO_WORKERS = Runtime.getRuntime().availableProcessors() + 1;
 
     /**
      * A map of properties that can be used to configure the SSH server

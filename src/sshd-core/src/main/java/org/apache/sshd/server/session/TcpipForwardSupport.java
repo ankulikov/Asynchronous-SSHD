@@ -38,7 +38,6 @@ import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.SshException;
 import org.apache.sshd.common.channel.ChannelOutputStream;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.server.ForwardingFilter;
 
 /**
@@ -184,7 +183,7 @@ public class TcpipForwardSupport extends IoHandlerAdapter {
                 throw new SshException("Session has been closed");
             }
             openFuture = new DefaultOpenFuture(lock);
-            LogUtils.info(log,"Send SSH_MSG_CHANNEL_OPEN on channel {0}", id);
+            log.info("Send SSH_MSG_CHANNEL_OPEN on channel {}", id);
             Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_OPEN, 0);
             buffer.putString(type);
             buffer.putInt(id);

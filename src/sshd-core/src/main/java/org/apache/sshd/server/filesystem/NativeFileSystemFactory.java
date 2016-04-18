@@ -19,10 +19,11 @@
 
 package org.apache.sshd.server.filesystem;
 
+import org.apache.sshd.common.Session;
 import org.apache.sshd.server.FileSystemFactory;
 import org.apache.sshd.server.FileSystemView;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
@@ -33,7 +34,7 @@ import java.io.File;
  */
 public class NativeFileSystemFactory implements FileSystemFactory {
 
-    private final Log LOG = LogFactory.getLog(NativeFileSystemFactory.class);
+    private final Logger LOG = LoggerFactory.getLogger(NativeFileSystemFactory.class);
 
     private boolean createHome;
 
@@ -77,7 +78,8 @@ public class NativeFileSystemFactory implements FileSystemFactory {
     /**
      * Create the appropriate user file system view.
      */
-    public FileSystemView createFileSystemView(String userName) {
+    public FileSystemView createFileSystemView(Session session) {
+        String userName = session.getUsername();
         // create home if does not exist
         if (createHome) {
             String homeDirStr = "/home/" + userName;

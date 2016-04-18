@@ -26,9 +26,8 @@ import org.apache.sshd.common.Signature;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.util.Buffer;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.security.KeyPair;
@@ -43,10 +42,13 @@ import java.security.interfaces.RSAPublicKey;
  */
 public class UserAuthPublicKey implements UserAuth {
 
-    protected final Log log = LogFactory.getLog(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
+
+    private final String username;
 
     public UserAuthPublicKey(ClientSessionImpl session, String username, KeyPair key) throws IOException {
         try {
+            this.username = username;
             log.info("Send SSH_MSG_USERAUTH_REQUEST for publickey");
             Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_USERAUTH_REQUEST, 0);
             int pos1 = buffer.wpos() - 1;
@@ -85,9 +87,13 @@ public class UserAuthPublicKey implements UserAuth {
         }
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     public Result next(Buffer buffer) throws IOException {
         SshConstants.Message cmd = buffer.getCommand();
-        LogUtils.info(log,"Received {0}", cmd);
+        log.info("Received {}", cmd);
         if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_SUCCESS) {
             return Result.Success;
         } if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_FAILURE) {

@@ -28,8 +28,8 @@ import org.apache.tomcat.jni.Local;
 import org.apache.tomcat.jni.Pool;
 import org.apache.tomcat.jni.Socket;
 import org.apache.tomcat.jni.Status;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -38,7 +38,7 @@ import java.io.IOException;
  */
 public class AgentForwardSupport {
 
-    private static final Log log = LogFactory.getLog(AgentForwardSupport.class);
+    private static final Logger log = LoggerFactory.getLogger(AgentForwardSupport.class);
 
     private final ServerSession session;
     private String authSocket;

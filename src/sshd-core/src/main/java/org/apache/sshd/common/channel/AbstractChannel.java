@@ -30,9 +30,8 @@ import org.apache.sshd.common.future.SshFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.util.Buffer;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -44,7 +43,7 @@ public abstract class AbstractChannel implements Channel {
     public static final int DEFAULT_WINDOW_SIZE = 0x200000;
     public static final int DEFAULT_PACKET_SIZE = 0x8000;
 
-    protected final Log log = LogFactory.getLog(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
     protected final Object lock = new Object();
     protected final Window localWindow = new Window(this, null, getClass().getName().contains(".client."), true);
     protected final Window remoteWindow = new Window(this, null, getClass().getName().contains(".client."), false);
@@ -85,14 +84,14 @@ public abstract class AbstractChannel implements Channel {
         try {
             synchronized (lock) {
                 if (immediately) {
-                    LogUtils.info(log,"Closing channel {0} immediately", id);
+                    log.info("Closing channel {} immediately", id);
                     closeFuture.setClosed();
                     lock.notifyAll();
                     session.unregisterChannel(this);
                 } else {
                     if (!closing) {
                         closing = true;
-                        LogUtils.info(log,"Send SSH_MSG_CHANNEL_CLOSE on channel {0}", id);
+                        log.info("Send SSH_MSG_CHANNEL_CLOSE on channel {}", id);
                         Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_CLOSE, 0);
                         buffer.putInt(recipient);
                         session.writePacket(buffer);
@@ -107,7 +106,7 @@ public abstract class AbstractChannel implements Channel {
     }
 
     public void handleClose() throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_CLOSE on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_CLOSE on channel {}", id);
         synchronized (lock) {
             close(false).setClosed();
             doClose();
@@ -123,9 +122,9 @@ public abstract class AbstractChannel implements Channel {
         if (len < 0 || len > 32768) {
             throw new IllegalStateException("Bad item length: " + len);
         }
-        LogUtils.debug(log,"Received SSH_MSG_CHANNEL_DATA on channel {0}", id);
+        log.debug("Received SSH_MSG_CHANNEL_DATA on channel {}", id);
         if (log.isTraceEnabled()) {
-            log.trace("Received channel data: "+BufferUtils.printHex(buffer.array(), buffer.rpos(), len));
+            log.trace("Received channel data: {}", BufferUtils.printHex(buffer.array(), buffer.rpos(), len));
         }
         doWriteData(buffer.array(), buffer.rpos(), len);
     }
@@ -134,7 +133,7 @@ public abstract class AbstractChannel implements Channel {
         int ex = buffer.getInt();
         // Only accept extended data for stderr
         if (ex != 1) {
-            LogUtils.info(log,"Send SSH_MSG_CHANNEL_FAILURE on channel {0}", id);
+            log.info("Send SSH_MSG_CHANNEL_FAILURE on channel {}", id);
             buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_FAILURE, 0);
             buffer.putInt(recipient);
             session.writePacket(buffer);
@@ -144,15 +143,15 @@ public abstract class AbstractChannel implements Channel {
         if (len < 0 || len > 32768) {
             throw new IllegalStateException("Bad item length: " + len);
         }
-        LogUtils.debug(log,"Received SSH_MSG_CHANNEL_EXTENDED_DATA on channel {0}", id);
+        log.debug("Received SSH_MSG_CHANNEL_EXTENDED_DATA on channel {}", id);
         if (log.isTraceEnabled()) {
-            log.trace("Received channel extended data: "+ BufferUtils.printHex(buffer.array(), buffer.rpos(), len));
+            log.trace("Received channel extended data: {}", BufferUtils.printHex(buffer.array(), buffer.rpos(), len));
         }
         doWriteExtendedData(buffer.array(), buffer.rpos(), len);
     }
 
     public void handleEof() throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_EOF on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_EOF on channel {}", id);
         synchronized (lock) {
             eof = true;
             lock.notifyAll();
@@ -160,13 +159,13 @@ public abstract class AbstractChannel implements Channel {
     }
 
     public void handleWindowAdjust(Buffer buffer) throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_WINDOW_ADJUST on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_WINDOW_ADJUST on channel {}", id);
         int window = buffer.getInt();
         remoteWindow.expand(window);
     }
 
     public void handleFailure() throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_FAILURE on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_FAILURE on channel {}", id);
         // TODO: do something to report failed requests?
     }
 
@@ -175,7 +174,7 @@ public abstract class AbstractChannel implements Channel {
     protected abstract void doWriteExtendedData(byte[] data, int off, int len) throws IOException;
 
     protected void sendEof() throws IOException {
-        LogUtils.info(log,"Send SSH_MSG_CHANNEL_EOF on channel {0}", id);
+        log.info("Send SSH_MSG_CHANNEL_EOF on channel {}", id);
         Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_EOF, 0);
         buffer.putInt(recipient);
         session.writePacket(buffer);
@@ -188,7 +187,7 @@ public abstract class AbstractChannel implements Channel {
     }
 
     protected void sendWindowAdjust(int len) throws IOException {
-        LogUtils.info(log,"Send SSH_MSG_CHANNEL_WINDOW_ADJUST on channel {0}", id);
+        log.info("Send SSH_MSG_CHANNEL_WINDOW_ADJUST on channel {}", id);
         Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_WINDOW_ADJUST, 0);
         buffer.putInt(recipient);
         buffer.putInt(len);

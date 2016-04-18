@@ -33,8 +33,8 @@ import org.apache.sshd.common.session.AbstractSession;
 import org.apache.sshd.common.util.Buffer;
 import org.apache.sshd.common.util.BufferUtils;
 import org.apache.sshd.server.session.ServerSession;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -43,7 +43,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public abstract class AbstractDHGServer implements KeyExchange {
 
-    private final Log log = LogFactory.getLog(getClass());
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     private ServerSession session;
     private byte[] V_S;
@@ -116,9 +116,9 @@ public abstract class AbstractDHGServer implements KeyExchange {
         sigH = buffer.getCompactData();
 
         if (log.isDebugEnabled()) {
-            log.debug("K_S:  "+BufferUtils.printHex(K_S));
-            log.debug("f:    "+ BufferUtils.printHex(f));
-            log.debug("sigH: "+ BufferUtils.printHex(sigH));
+            log.debug("K_S:  {}", BufferUtils.printHex(K_S));
+            log.debug("f:    {}", BufferUtils.printHex(f));
+            log.debug("sigH: {}", BufferUtils.printHex(sigH));
         }
 
         // Send response

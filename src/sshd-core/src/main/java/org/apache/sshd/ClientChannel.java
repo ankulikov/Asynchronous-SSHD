@@ -18,15 +18,11 @@
  */
 package org.apache.sshd;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import org.apache.sshd.client.PumpingMethod;
 import org.apache.sshd.client.future.OpenFuture;
 import org.apache.sshd.common.future.CloseFuture;
-import org.apache.sshd.common.util.AutoFlushOutputStream;
-import org.apache.sshd.common.util.SshListener;
 
 /**
  * A client channel used to communicate with
@@ -62,18 +58,4 @@ public interface ClientChannel {
     CloseFuture close(boolean immediately);
 
     Integer getExitStatus();
-
-    PumpingMethod getPumpingMethod();
-    void setPumpingMethod(PumpingMethod pumpingMethod);
-    boolean pump();
-
-    void generateStreams(boolean mergeErrWithOut) throws IOException;
-
-    InputStream getInput();
-    InputStream getError();
-    OutputStream getOutput();
-
-    void setInputListener(SshListener<AutoFlushOutputStream.WriteStreamEvent> listener);
-    void setErrorListener(SshListener<AutoFlushOutputStream.WriteStreamEvent> listener);
-    void setPumpingListener(SshListener listener);
 }

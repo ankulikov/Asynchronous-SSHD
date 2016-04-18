@@ -22,8 +22,9 @@ import java.io.IOException;
 import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.mina.core.session.IoSession;
 import org.apache.sshd.agent.AgentForwardSupport;
@@ -38,7 +39,7 @@ import org.apache.sshd.common.future.CloseFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.session.AbstractSession;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
+import org.apache.sshd.server.HandshakingUserAuth;
 import org.apache.sshd.server.ServerFactoryManager;
 import org.apache.sshd.server.UserAuth;
 import org.apache.sshd.server.channel.OpenChannelException;
@@ -52,25 +53,25 @@ import org.apache.sshd.server.x11.X11ForwardSupport;
  *
  * TODO: better use of SSH_MSG_DISCONNECT and disconnect error codes
  *
- * TODO: use a single Timer for on the server for all sessions
- *
  * TODO Add javadoc
  *
  * @author <a href="mailto:dev@mina.apache.org">Apache MINA SSHD Project</a>
  */
 public class ServerSession extends AbstractSession {
 
-    private Timer timer;
-    private TimerTask authTimerTask;
+    private Future authTimerFuture;
+    private Future idleTimerFuture;
     private State state = State.ReceiveKexInit;
-    private String username;
     private int maxAuthRequests = 20;
     private int nbAuthRequests;
     private int authTimeout = 10 * 60 * 1000; // 10 minutes in milliseconds
+    private int idleTimeout = 10 * 60 * 1000; // 10 minutes in milliseconds
     private boolean allowMoreSessions = true;
     private final TcpipForwardSupport tcpipForward;
     private final AgentForwardSupport agentForward;
     private final X11ForwardSupport x11Forward;
+
+    private HandshakingUserAuth currentAuth;
 
     private List<NamedFactory<UserAuth>> userAuthFactories;
 
@@ -80,8 +81,9 @@ public class ServerSession extends AbstractSession {
 
     public ServerSession(FactoryManager server, IoSession ioSession) throws Exception {
         super(server, ioSession);
-        maxAuthRequests = getIntProperty(FactoryManager.MAX_AUTH_REQUESTS, maxAuthRequests);
-        authTimeout = getIntProperty(FactoryManager.AUTH_TIMEOUT, authTimeout);
+        maxAuthRequests = getIntProperty(ServerFactoryManager.MAX_AUTH_REQUESTS, maxAuthRequests);
+        authTimeout = getIntProperty(ServerFactoryManager.AUTH_TIMEOUT, authTimeout);
+        idleTimeout = getIntProperty(ServerFactoryManager.IDLE_TIMEOUT, idleTimeout);
         tcpipForward = new TcpipForwardSupport(this);
         agentForward = new AgentForwardSupport(this);
         x11Forward = new X11ForwardSupport(this);
@@ -93,6 +95,7 @@ public class ServerSession extends AbstractSession {
     @Override
     public CloseFuture close(boolean immediately) {
         unscheduleAuthTimer();
+        unscheduleIdleTimer();
         tcpipForward.close();
         agentForward.close();
         x11Forward.close();
@@ -107,34 +110,38 @@ public class ServerSession extends AbstractSession {
         return kex;
     }
 
+    public byte [] getSessionId() {
+      return sessionId;
+    }
+
     public ServerFactoryManager getServerFactoryManager() {
         return (ServerFactoryManager) factoryManager;
     }
 
-    public String getUsername() {
-        return username;
+    protected ScheduledExecutorService getScheduledExecutorService() {
+        return getServerFactoryManager().getScheduledExecutorService();
     }
 
     protected void handleMessage(Buffer buffer) throws Exception {
         SshConstants.Message cmd = buffer.getCommand();
-        LogUtils.debug(log,"Received packet {0}", cmd);
+        log.debug("Received packet {}", cmd);
         switch (cmd) {
             case SSH_MSG_DISCONNECT: {
                 int code = buffer.getInt();
                 String msg = buffer.getString();
-                LogUtils.info(log,"Received SSH_MSG_DISCONNECT (reason={0}, msg={1})", code, msg);
+                log.info("Received SSH_MSG_DISCONNECT (reason={}, msg={})", code, msg);
                 close(true);
                 break;
             }
             case SSH_MSG_UNIMPLEMENTED: {
                 int code = buffer.getInt();
-                LogUtils.info(log,"Received SSH_MSG_UNIMPLEMENTED #{0}", code);
+                log.info("Received SSH_MSG_UNIMPLEMENTED #{}", code);
                 break;
             }
             case SSH_MSG_DEBUG: {
                 boolean display = buffer.getBoolean();
                 String msg = buffer.getString();
-                LogUtils.info(log,"Received SSH_MSG_DEBUG (display={0}) '{1}'", display, msg);
+                log.info("Received SSH_MSG_DEBUG (display={}) '{}'", display, msg);
                 break;
             }
             case SSH_MSG_IGNORE:
@@ -173,80 +180,30 @@ public class ServerSession extends AbstractSession {
                         break;
                     case WaitingUserAuth:
                         if (cmd != SshConstants.Message.SSH_MSG_SERVICE_REQUEST) {
-                            LogUtils.info(log,"Expecting a {0}, but received {1}", SshConstants.Message.SSH_MSG_SERVICE_REQUEST, cmd);
+                            log.info("Expecting a {}, but received {}", SshConstants.Message.SSH_MSG_SERVICE_REQUEST, cmd);
                             notImplemented();
                         } else {
                             String request = buffer.getString();
-                            LogUtils.info(log,"Received SSH_MSG_SERVICE_REQUEST '{0}'", request);
+                            log.info("Received SSH_MSG_SERVICE_REQUEST '{}'", request);
                             if ("ssh-userauth".equals(request)) {
-                                userAuth(buffer);
+                                userAuth(buffer, null);
                             } else {
                                 disconnect(SshConstants.SSH2_DISCONNECT_SERVICE_NOT_AVAILABLE, "Bad service request: " + request);
                             }
                         }
                         break;
                     case UserAuth:
-                        if (cmd != SshConstants.Message.SSH_MSG_USERAUTH_REQUEST) {
+                        if (cmd != SshConstants.Message.SSH_MSG_USERAUTH_REQUEST && (currentAuth == null || !currentAuth.handles(cmd))) {
                             disconnect(SshConstants.SSH2_DISCONNECT_PROTOCOL_ERROR, "Protocol error: expected packet " + SshConstants.Message.SSH_MSG_USERAUTH_REQUEST + ", got " + cmd);
                             return;
                         }
-                        log.info("Received SSH_MSG_USERAUTH_REQUEST");
-                        userAuth(buffer);
+                        log.info("Received " + cmd);
+                        userAuth(buffer, cmd);
                         break;
                     case Running:
-                        switch (cmd) {
-                            case SSH_MSG_SERVICE_REQUEST:
-                                serviceRequest(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_OPEN:
-                                channelOpen(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_OPEN_CONFIRMATION:
-                                channelOpenConfirmation(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_OPEN_FAILURE:
-                                channelOpenFailure(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_REQUEST:
-                                channelRequest(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_DATA:
-                                channelData(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_EXTENDED_DATA:
-                                channelExtendedData(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_WINDOW_ADJUST:
-                                channelWindowAdjust(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_EOF:
-                                channelEof(buffer);
-                                break;
-                            case SSH_MSG_CHANNEL_CLOSE:
-                                channelClose(buffer);
-                                break;
-                            case SSH_MSG_GLOBAL_REQUEST:
-                                globalRequest(buffer);
-                                break;
-                            case SSH_MSG_KEXINIT:
-                                receiveKexInit(buffer);
-                                sendKexInit();
-                                negociate();
-                                kex = NamedFactory.Utils.create(factoryManager.getKeyExchangeFactories(), negociated[SshConstants.PROPOSAL_KEX_ALGS]);
-                                kex.init(this, serverVersion.getBytes(), clientVersion.getBytes(), I_S, I_C);
-                                break;
-                            case SSH_MSG_KEXDH_INIT:
-                                buffer.rpos(buffer.rpos() - 1);
-                                if (kex.next(buffer)) {
-                                    sendNewKeys();
-                                }
-                                break;
-                            case SSH_MSG_NEWKEYS:
-                                receiveNewKeys(true);
-                                break;
-                            default:
-                                throw new IllegalStateException("Unsupported command: " + cmd);
-                        }
+                        unscheduleIdleTimer();
+                        running(cmd, buffer);
+                        scheduleIdleTimer();
                         break;
                     default:
                         throw new IllegalStateException("Unsupported state: " + state);
@@ -254,8 +211,64 @@ public class ServerSession extends AbstractSession {
         }
     }
 
+    private void running(SshConstants.Message cmd, Buffer buffer) throws Exception {
+        switch (cmd) {
+            case SSH_MSG_SERVICE_REQUEST:
+                serviceRequest(buffer);
+                break;
+            case SSH_MSG_CHANNEL_OPEN:
+                channelOpen(buffer);
+                break;
+            case SSH_MSG_CHANNEL_OPEN_CONFIRMATION:
+                channelOpenConfirmation(buffer);
+                break;
+            case SSH_MSG_CHANNEL_OPEN_FAILURE:
+                channelOpenFailure(buffer);
+                break;
+            case SSH_MSG_CHANNEL_REQUEST:
+                channelRequest(buffer);
+                break;
+            case SSH_MSG_CHANNEL_DATA:
+                channelData(buffer);
+                break;
+            case SSH_MSG_CHANNEL_EXTENDED_DATA:
+                channelExtendedData(buffer);
+                break;
+            case SSH_MSG_CHANNEL_WINDOW_ADJUST:
+                channelWindowAdjust(buffer);
+                break;
+            case SSH_MSG_CHANNEL_EOF:
+                channelEof(buffer);
+                break;
+            case SSH_MSG_CHANNEL_CLOSE:
+                channelClose(buffer);
+                break;
+            case SSH_MSG_GLOBAL_REQUEST:
+                globalRequest(buffer);
+                break;
+            case SSH_MSG_KEXINIT:
+                receiveKexInit(buffer);
+                sendKexInit();
+                negociate();
+                kex = NamedFactory.Utils.create(factoryManager.getKeyExchangeFactories(), negociated[SshConstants.PROPOSAL_KEX_ALGS]);
+                kex.init(this, serverVersion.getBytes(), clientVersion.getBytes(), I_S, I_C);
+                break;
+            case SSH_MSG_KEXDH_INIT:
+                buffer.rpos(buffer.rpos() - 1);
+                if (kex.next(buffer)) {
+                    sendNewKeys();
+                }
+                break;
+            case SSH_MSG_NEWKEYS:
+                receiveNewKeys(true);
+                break;
+            default:
+                throw new IllegalStateException("Unsupported command: " + cmd);
+        }
+    }
+
     private void scheduleAuthTimer() {
-        authTimerTask = new TimerTask() {
+        Runnable authTimerTask = new Runnable() {
             public void run() {
                 try {
                     processAuthTimer();
@@ -264,18 +277,33 @@ public class ServerSession extends AbstractSession {
                 }
             }
         };
-        timer = new Timer(true);
-        timer.schedule(authTimerTask, authTimeout);
+        authTimerFuture = getScheduledExecutorService().schedule(authTimerTask, authTimeout, TimeUnit.MILLISECONDS);
     }
 
     private void unscheduleAuthTimer() {
-        if (authTimerTask != null) {
-            authTimerTask.cancel();
-            authTimerTask = null;
+        if (authTimerFuture != null) {
+            authTimerFuture.cancel(false);
+            authTimerFuture = null;
         }
-        if (timer != null) {
-            timer.cancel();
-            timer = null;
+    }
+
+    private void scheduleIdleTimer() {
+        Runnable idleTimerTask = new Runnable() {
+            public void run() {
+                try {
+                    processIdleTimer();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        };
+        idleTimerFuture = getScheduledExecutorService().schedule(idleTimerTask, idleTimeout, TimeUnit.MILLISECONDS);
+    }
+
+    private void unscheduleIdleTimer() {
+        if (idleTimerFuture != null) {
+            idleTimerFuture.cancel(false);
+            idleTimerFuture = null;
         }
     }
 
@@ -284,6 +312,10 @@ public class ServerSession extends AbstractSession {
             disconnect(SshConstants.SSH2_DISCONNECT_PROTOCOL_ERROR,
                        "User authentication has timed out");
         }
+    }
+
+    private void processIdleTimer() throws IOException {
+        disconnect(SshConstants.SSH2_DISCONNECT_PROTOCOL_ERROR, "User idle has timed out after " + idleTimeout + "ms.");
     }
 
     private void sendServerIdentification() {
@@ -305,7 +337,7 @@ public class ServerSession extends AbstractSession {
         if (clientVersion == null) {
             return false;
         }
-        LogUtils.info(log,"Client version string: {0}", clientVersion);
+        log.info("Client version string: {}", clientVersion);
         if (!clientVersion.startsWith("SSH-2.0-")) {
             throw new SshException(SshConstants.SSH2_DISCONNECT_PROTOCOL_VERSION_NOT_SUPPORTED,
                                    "Unsupported protocol version: " + clientVersion);
@@ -320,50 +352,89 @@ public class ServerSession extends AbstractSession {
 
     private void serviceRequest(Buffer buffer) throws Exception {
         String request = buffer.getString();
-        LogUtils.info(log,"Received SSH_MSG_SERVICE_REQUEST '{0}'", request);
+        log.info("Received SSH_MSG_SERVICE_REQUEST '{}'", request);
         // TODO: handle service requests
         disconnect(SshConstants.SSH2_DISCONNECT_SERVICE_NOT_AVAILABLE, "Unsupported service request: " + request);
     }
 
-    private void userAuth(Buffer buffer) throws Exception {
+    private void userAuth(Buffer buffer, SshConstants.Message cmd) throws Exception {
         if (state == State.WaitingUserAuth) {
             log.info("Accepting user authentication request");
             buffer = createBuffer(SshConstants.Message.SSH_MSG_SERVICE_ACCEPT, 0);
             buffer.putString("ssh-userauth");
             writePacket(buffer);
             userAuthFactories = new ArrayList<NamedFactory<UserAuth>>(getServerFactoryManager().getUserAuthFactories());
-            LogUtils.info(log,"Authorized authentication methods: {0}", NamedFactory.Utils.getNames(userAuthFactories));
+            log.info("Authorized authentication methods: {}", NamedFactory.Utils.getNames(userAuthFactories));
             state = State.UserAuth;
         } else {
             if (nbAuthRequests++ > maxAuthRequests) {
                 throw new SshException(SshConstants.SSH2_DISCONNECT_PROTOCOL_ERROR, "Too may authentication failures");
             }
-            String username = buffer.getString();
-            String svcName = buffer.getString();
-            String method = buffer.getString();
+            
+            Boolean authed   = null;
+            String  username = null;
 
-            LogUtils.info(log,"Authenticating user '{0}' with method '{1}'", username, method);
-            Boolean authed = null;
-            NamedFactory<UserAuth> factory = NamedFactory.Utils.get(userAuthFactories, method);
-            if (factory != null) {
+            if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_REQUEST) {
+              username = buffer.getString();
+              
+              String svcName = buffer.getString();
+              String method = buffer.getString();
+              
+              log.info("Authenticating user '{}' with method '{}'", username, method);
+              NamedFactory<UserAuth> factory = NamedFactory.Utils.get(userAuthFactories, method);
+              if (factory != null) {
                 UserAuth auth = factory.create();
                 try {
-                    authed = auth.auth(this, username, buffer);
-                    if (authed == null) {
-                        // authentication is still ongoing
-                        log.info("Authentication not finished");
-                        return;
-                    } else {
-                        log.info(authed ? "Authentication succeeded" : "Authentication failed");
+                  authed = auth.auth(this, username, buffer);
+                  if (authed == null) {
+                    // authentication is still ongoing
+                    log.info("Authentication not finished");
+                    
+                    if (auth instanceof HandshakingUserAuth) {
+                      currentAuth = (HandshakingUserAuth) auth;
+                      
+                      // GSSAPI needs the user name and service to verify the MIC
+                      
+                      currentAuth.setServiceName(svcName);
                     }
+                    return;
+                  } else {
+                    log.info(authed ? "Authentication succeeded" : "Authentication failed");
+                  }
                 } catch (Exception e) {
-                    // Continue
-                    authed = false;
-                    LogUtils.info(log,"Authentication failed: {0}", e.getMessage());
+                  // Continue
+                  authed = false;
+                  log.info("Authentication failed: {}", e.getMessage());
                 }
+                
+              } else {
+                log.info("Unsupported authentication method '{}'", method);
+              }
             } else {
-                LogUtils.info(log,"Unsupported authentication method '{0}'", method);
+              try {
+                authed = currentAuth.next(this, cmd, buffer);
+                
+                if (authed == null) {
+                  // authentication is still ongoing
+                  log.info("Authentication still not finished");
+                  return;
+                } else if (authed.booleanValue()) {
+                  username = currentAuth.getUserName();
+                }
+              } catch (Exception e) {
+                // failed
+                authed = false;
+                log.info("Authentication next failed: {}", e.getMessage());
+              }
             }
+
+            // No more handshakes now - clean up if necessary
+            
+            if (currentAuth != null) {
+              currentAuth.destroy();
+              currentAuth = null;
+            }
+
             if (authed != null && authed) {
 
                 if (getFactoryManager().getProperties() != null) {
@@ -422,7 +493,7 @@ public class ServerSession extends AbstractSession {
         final int rwsize = buffer.getInt();
         final int rmpsize = buffer.getInt();
 
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_OPEN {0}", type);
+        log.info("Received SSH_MSG_CHANNEL_OPEN {}", type);
 
         if (closing) {
             Buffer buf = createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_OPEN_FAILURE, 0);
@@ -490,7 +561,7 @@ public class ServerSession extends AbstractSession {
     private void globalRequest(Buffer buffer) throws Exception {
         String req = buffer.getString();
         boolean wantReply = buffer.getBoolean();
-        if (req.equals("keepalive@openssh.com")) {
+        if (req.startsWith("keepalive@")) {
             // Relatively standard KeepAlive directive, just wants failure
         } else if (req.equals("no-more-sessions@openssh.com")) {
             allowMoreSessions = false;
@@ -501,8 +572,8 @@ public class ServerSession extends AbstractSession {
             tcpipForward.cancel(buffer, wantReply);
             return;
         } else {
-            LogUtils.info(log,"Received SSH_MSG_GLOBAL_REQUEST {0}", req);
-            LogUtils.error(log,"Unknown global request: {0}", req);
+            log.info("Received SSH_MSG_GLOBAL_REQUEST {}", req);
+            log.warn("Unknown global request: {}", req);
         }
         if (wantReply) {
             buffer = createBuffer(SshConstants.Message.SSH_MSG_REQUEST_FAILURE, 0);

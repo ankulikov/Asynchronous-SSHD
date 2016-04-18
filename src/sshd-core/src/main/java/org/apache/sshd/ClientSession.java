@@ -22,9 +22,8 @@ import java.io.IOException;
 import java.security.KeyPair;
 import java.util.Map;
 
-import org.apache.sshd.client.PumpingMethod;
 import org.apache.sshd.client.channel.ChannelExec;
-import org.apache.sshd.client.channel.ChannelSession;
+import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.channel.ChannelSubsystem;
 import org.apache.sshd.client.future.AuthFuture;
 import org.apache.sshd.common.future.CloseFuture;
@@ -67,7 +66,7 @@ public interface ClientSession {
 
     ClientChannel createChannel(String type, String subType) throws Exception;
 
-    ChannelSession createShellChannel() throws Exception;
+    ChannelShell createShellChannel() throws Exception;
 
     ChannelExec createExecChannel(String command) throws Exception;
 
@@ -78,8 +77,4 @@ public interface ClientSession {
     CloseFuture close(boolean immediately);
 
     Map<Object, Object> getMetadataMap();
-
-    PumpingMethod getPumpingMethod();
-    void setPumpingMethod(PumpingMethod pumpingMethod);
-    boolean pump();
 }

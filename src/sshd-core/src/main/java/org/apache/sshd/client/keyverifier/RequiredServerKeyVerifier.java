@@ -25,8 +25,8 @@ import java.util.Arrays;
 import org.apache.sshd.ClientSession;
 import org.apache.sshd.client.ServerKeyVerifier;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A ServerKeyVerifier that accepts one server key (specified in the constructor)
@@ -35,7 +35,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class RequiredServerKeyVerifier implements ServerKeyVerifier {
 
-	protected final Log log = LogFactory.getLog(getClass());
+	protected final Logger log = LoggerFactory.getLogger(getClass());
 
 	final PublicKey requiredKey;
 

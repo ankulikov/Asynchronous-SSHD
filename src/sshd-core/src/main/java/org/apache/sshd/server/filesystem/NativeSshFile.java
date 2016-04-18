@@ -20,8 +20,8 @@
 package org.apache.sshd.server.filesystem;
 
 import org.apache.sshd.server.SshFile;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -45,7 +46,7 @@ import java.util.StringTokenizer;
  */
 public class NativeSshFile implements SshFile {
 
-    private final Log LOG = LogFactory.getLog(NativeSshFile.class);
+    private final Logger LOG = LoggerFactory.getLogger(NativeSshFile.class);
 
     // the file name with respect to the user root.
     // The path separator character will be '/' and
@@ -183,6 +184,34 @@ public class NativeSshFile implements SshFile {
     }
 
     /**
+     * File.canExecute() method is only available on JDK 1.6
+     */
+    private static final Method CAN_EXECUTE_METHOD;
+    static {
+        Method method = null;
+        try {
+           method = File.class.getMethod("canExecute");
+        } catch (Throwable t) {
+        }
+        CAN_EXECUTE_METHOD = method;
+    }
+
+    /**
+     * Check file exec permission.
+     */
+    public boolean isExecutable() {
+        if (CAN_EXECUTE_METHOD != null) {
+            try {
+                return (Boolean) CAN_EXECUTE_METHOD.invoke(file);
+            } catch (Throwable t) {
+            }
+        }
+        // Default directories to being executable
+        // as on unix systems to allow listing their contents.
+        return file.isDirectory();
+    }
+
+    /**
      * Has delete permission.
      */
     public boolean isRemovable() {
@@ -244,10 +273,19 @@ public class NativeSshFile implements SshFile {
     }
 
     /**
+     * Create a new file
+     */
+    public boolean create() throws IOException {
+        return file.createNewFile();
+    }
+
+    /**
      * Truncate file to length 0.
      */
     public void truncate() throws IOException{
-        new RandomAccessFile(file, "rw").setLength(0);
+        RandomAccessFile tempFile = new RandomAccessFile(file, "rw");
+        tempFile.setLength(0);
+        tempFile.close();
     }
 
     /**

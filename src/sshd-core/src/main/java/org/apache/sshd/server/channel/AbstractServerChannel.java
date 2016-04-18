@@ -25,7 +25,6 @@ import org.apache.sshd.client.future.OpenFuture;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.channel.AbstractChannel;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
 
 /**
  * TODO Add javadoc
@@ -60,7 +59,7 @@ public abstract class AbstractServerChannel extends AbstractChannel {
     protected void sendExitStatus(int v) throws IOException {
         if (!exitStatusSent) {
             exitStatusSent = true;
-            LogUtils.info(log,"Send SSH_MSG_CHANNEL_REQUEST exit-status on channel {0}", id);
+            log.info("Send SSH_MSG_CHANNEL_REQUEST exit-status on channel {}", id);
             Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_REQUEST, 0);
             buffer.putInt(recipient);
             buffer.putString("exit-status");

@@ -31,8 +31,8 @@ import org.apache.sshd.common.channel.AbstractChannel;
 import org.apache.sshd.common.future.CloseFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.session.AbstractSession;
-import org.apache.sshd.common.util.*;
-import org.apache.sshd.client.PumpingMethod;
+import org.apache.sshd.common.util.Buffer;
+import org.apache.sshd.common.util.IoUtils;
 
 /**
  * TODO Add javadoc
@@ -130,7 +130,7 @@ public abstract class AbstractClientChannel extends AbstractChannel implements C
                     cond |= EXIT_SIGNAL;
                 }
                 if ((cond & mask) != 0) {
-                    LogUtils.trace(log, "WaitFor call returning on channel {0}, mask={1}, cond={2}", id, mask, cond);
+                    log.trace("WaitFor call returning on channel {}, mask={}, cond={}", new Object[] { id, mask, cond });
                     return cond;
                 }
                 if (timeout > 0) {
@@ -145,13 +145,13 @@ public abstract class AbstractClientChannel extends AbstractChannel implements C
                     }
                 }
                 try {
-                    LogUtils.trace(log, "Waiting for lock on channel {0}, mask={1}, cond={2}", id, mask, cond);
+                    log.trace("Waiting for lock on channel {}, mask={}, cond={}", new Object[] { id, mask, cond });
                     if (timeout > 0) {
                         lock.wait(timeout);
                     } else {
                         lock.wait();
                     }
-                    LogUtils.trace(log,"Lock notified on channel {0}", id);
+                    log.trace("Lock notified on channel {}", id);
                 } catch (InterruptedException e) {
                     // Ignore
                 }
@@ -164,7 +164,7 @@ public abstract class AbstractClientChannel extends AbstractChannel implements C
             throw new SshException("Session has been closed");
         }
         openFuture = new DefaultOpenFuture(lock);
-        LogUtils.info(log,"Send SSH_MSG_CHANNEL_OPEN on channel {0}", id);
+        log.info("Send SSH_MSG_CHANNEL_OPEN on channel {}", id);
         Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_OPEN, 0);
         buffer.putString(type);
         buffer.putInt(id);
@@ -226,7 +226,7 @@ public abstract class AbstractClientChannel extends AbstractChannel implements C
     }
 
     public void handleRequest(Buffer buffer) throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_REQUEST on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_REQUEST on channel {}", id);
         String req = buffer.getString();
         if ("exit-status".equals(req)) {
             buffer.getBoolean();
@@ -246,55 +246,5 @@ public abstract class AbstractClientChannel extends AbstractChannel implements C
 
     public Integer getExitStatus() {
         return exitStatus;
-    }
-
-    public PumpingMethod getPumpingMethod()
-    {
-        return PumpingMethod.SELF;
-    }
-
-    public void setPumpingMethod(PumpingMethod pumpingMethod)
-    {
-        throw new IllegalArgumentException("Delegating pumping is not implemented");
-    }
-
-    public boolean pump()
-    {
-        throw new IllegalArgumentException("Delegating pumping is not implemented");
-    }
-
-    public InputStream getInput()
-    {
-        throw new UnsupportedOperationException("getInput for "+this.getClass().getName());
-    }
-
-    public InputStream getError()
-    {
-        throw new UnsupportedOperationException("getError for "+this.getClass().getName());
-    }
-
-    public OutputStream getOutput()
-    {
-        throw new UnsupportedOperationException("getOutput for "+this.getClass().getName());
-    }
-
-    public void setInputListener(SshListener<AutoFlushOutputStream.WriteStreamEvent> listener)
-    {
-        throw new UnsupportedOperationException("setInputListener for "+this.getClass().getName());
-    }
-
-    public void setErrorListener(SshListener<AutoFlushOutputStream.WriteStreamEvent> listener)
-    {
-        throw new UnsupportedOperationException("setErrorListener for "+this.getClass().getName());
-    }
-
-    public void setPumpingListener(SshListener listener)
-    {
-        throw new UnsupportedOperationException("setPumpingListener for "+this.getClass().getName());
-    }
-
-    public void generateStreams(boolean mergeErrWithOut) throws IOException
-    {
-        throw new UnsupportedOperationException("generateStreams for "+this.getClass().getName());
     }
 }

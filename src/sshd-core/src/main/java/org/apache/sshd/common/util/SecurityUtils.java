@@ -31,8 +31,8 @@ import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -43,7 +43,7 @@ public class SecurityUtils {
 
     public static final String BOUNCY_CASTLE = "BC";
 
-    private static final Log LOG = LogFactory.getLog(SecurityUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SecurityUtils.class);
 
     private static String securityProvider = null;
     private static Boolean registerBouncyCastle;

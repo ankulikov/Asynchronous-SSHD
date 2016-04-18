@@ -24,8 +24,8 @@ import java.security.PublicKey;
 import org.apache.sshd.ClientSession;
 import org.apache.sshd.client.ServerKeyVerifier;
 import org.apache.sshd.common.util.BufferUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A ServerKeyVerifier that accepts all server keys.
@@ -34,7 +34,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class AcceptAllServerKeyVerifier implements ServerKeyVerifier {
 
-	protected final Log log = LogFactory.getLog(getClass());
+	protected final Logger log = LoggerFactory.getLogger(getClass());
 
 	public static final ServerKeyVerifier INSTANCE = new AcceptAllServerKeyVerifier();
 

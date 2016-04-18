@@ -19,10 +19,12 @@
 package org.apache.sshd.server;
 
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 
 import org.apache.sshd.common.Factory;
 import org.apache.sshd.common.FactoryManager;
 import org.apache.sshd.common.NamedFactory;
+import org.apache.sshd.server.auth.gss.GSSAuthenticator;
 
 /**
  * The <code>ServerFactoryManager</code> enable the retrieval of additional
@@ -34,11 +36,31 @@ public interface ServerFactoryManager extends FactoryManager {
     /**
      * Key used to retrieve the value of the maximum concurrent open session count per username
      */
-    String MAX_CONCURRENT_SESSIONS = "max-concurrent-sessions";
+    public static final String MAX_CONCURRENT_SESSIONS = "max-concurrent-sessions";
     /**
      * Key used to retrieve the value of the server identification string if not default.
      */
-    String SERVER_IDENTIFICATION = "server-identification";
+    public static final String SERVER_IDENTIFICATION = "server-identification";
+    /**
+     * Key used to retrieve the value in the configuration properties map
+     * of the maximum number of failed authentication requests before the
+     * server closes the connection.
+     */
+    public static final String MAX_AUTH_REQUESTS = "max-auth-requests";
+
+    /**
+     * Key used to retrieve the value of the timeout after which
+     * the server will close the connection if the client has not been
+     * authenticated.
+     */
+    public static final String AUTH_TIMEOUT = "auth-timeout";
+
+    /**
+     * Key used to retrieve the value of idle timeout after which
+     * the server will close the connection.  In milliseconds.
+     */
+    public static final String IDLE_TIMEOUT = "idle-timeout";
+
 
     /**
      * Retrieve the list of named factories for <code>UserAuth<code> objects.
@@ -66,6 +88,16 @@ public interface ServerFactoryManager extends FactoryManager {
      * @return the <code>PasswordAuthenticator</code> or <code>null</code>
      */
     PasswordAuthenticator getPasswordAuthenticator();
+
+    /**
+     * Retrieve the <code>GSSAuthenticator</code> to be used by the SSH server.
+     * If no authenticator has been configured (i.e. this method returns
+     * <code>null</code>), then client authentication requests based on gssapi 
+     * will be rejected.
+     *
+     * @return the <code>GSSAuthenticator</code> or <code>null</code>
+     */
+    GSSAuthenticator getGSSAuthenticator();
 
     /**
      * Retrieve the <code>ForwardingFilter</code> to be used by the SSH server.
@@ -98,7 +130,7 @@ public interface ServerFactoryManager extends FactoryManager {
      * @return a valid <code>FileSystemFactory</code> object or <code>null</code> if commands
      *         are not supported on this server
      */
-     FileSystemFactory getFileSystemFactory();
+    FileSystemFactory getFileSystemFactory();
 
     /**
      * Retrieve the list of named factories for <code>CommandFactory.Command</code> to
@@ -108,5 +140,13 @@ public interface ServerFactoryManager extends FactoryManager {
      *         or <code>null</code> if subsystems are not supported on this server
      */
     List<NamedFactory<Command>> getSubsystemFactories();
+
+
+    /**
+     * Retrieve the <code>ScheduledExecutorService</code> to be used.
+     *
+     * @return the <code>ScheduledExecutorService</code>, never <code>null</code>
+     */
+    ScheduledExecutorService getScheduledExecutorService();
 
 }

@@ -24,9 +24,8 @@ import org.apache.sshd.client.UserAuth;
 import org.apache.sshd.client.session.ClientSessionImpl;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TODO Add javadoc
@@ -35,9 +34,12 @@ import org.apache.sshd.common.util.LogUtils;
  */
 public class UserAuthPassword implements UserAuth {
 
-    protected final Log log = LogFactory.getLog(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
+
+    private final String username;
 
     public UserAuthPassword(ClientSessionImpl session, String username, String password) throws IOException {
+        this.username = username;
         log.info("Send SSH_MSG_USERAUTH_REQUEST for password");
         Buffer buffer = session.createBuffer(SshConstants.Message.SSH_MSG_USERAUTH_REQUEST, 0);
         buffer.putString(username);
@@ -48,9 +50,13 @@ public class UserAuthPassword implements UserAuth {
         session.writePacket(buffer);
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     public Result next(Buffer buffer) throws IOException {
         SshConstants.Message cmd = buffer.getCommand();
-        LogUtils.info(log,"Received {0}", cmd);
+        log.info("Received {}", cmd);
         if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_SUCCESS) {
             return Result.Success;
         } if (cmd == SshConstants.Message.SSH_MSG_USERAUTH_FAILURE) {

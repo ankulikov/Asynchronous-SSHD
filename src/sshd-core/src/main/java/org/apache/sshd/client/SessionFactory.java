@@ -21,13 +21,8 @@ package org.apache.sshd.client;
 import org.apache.mina.core.session.IoSession;
 import org.apache.sshd.SshClient;
 import org.apache.sshd.client.session.ClientSessionImpl;
-import org.apache.sshd.common.AbstractSessionIoHandler;
 import org.apache.sshd.common.session.AbstractSession;
-import org.apache.sshd.ClientSession;
-import org.apache.sshd.common.util.SshListener;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.apache.sshd.common.session.AbstractSessionFactory;
 
 /**
  * A factory of client sessions.
@@ -37,44 +32,16 @@ import java.util.List;
  *
  * @author <a href="mailto:dev@mina.apache.org">Apache MINA SSHD Project</a>
  */
-public class SessionFactory extends AbstractSessionIoHandler {
+public class SessionFactory extends AbstractSessionFactory {
 
     protected SshClient client;
-    private List<ClientSession> sessions = new ArrayList<ClientSession>();
-    private SshListener listener=null;
 
     public void setClient(SshClient client) {
         this.client = client;
     }
 
-    protected AbstractSession createSession(IoSession ioSession) throws Exception {
-		ClientSessionImpl session = new ClientSessionImpl(client, ioSession);
-
-		if (client.getPumpingMethod() == PumpingMethod.PARENT
-				|| client.getPumpingMethod() == PumpingMethod.SELF)
-			session.setPumpingMethod(PumpingMethod.PARENT);
-        session.setPumpingListener(listener);
-		
-		synchronized (sessions) {
-			sessions.add(session);
-		}
-		return session;
+    protected AbstractSession doCreateSession(IoSession ioSession) throws Exception {
+        return new ClientSessionImpl(client, ioSession);
     }
 
-	public List<ClientSession> getSessions() {
-		return sessions;
-	}
-
-	@Override
-	public void sessionClosed(IoSession ioSession) throws Exception {
-		synchronized (sessions) {
-			sessions.remove(AbstractSession.getSession(ioSession, false));
-		}
-		super.sessionClosed(ioSession);
-	}
-
-    public void setPumpListener(SshListener listener)
-    {
-        this.listener = listener;
-    }
 }

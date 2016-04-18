@@ -42,7 +42,6 @@ import org.apache.sshd.common.future.CloseFuture;
 import org.apache.sshd.common.future.SshFuture;
 import org.apache.sshd.common.future.SshFutureListener;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.sshd.common.util.LogUtils;
 import org.apache.sshd.server.ForwardingFilter;
 import org.apache.sshd.server.session.ServerSession;
 
@@ -93,8 +92,8 @@ public class ChannelDirectTcpip extends AbstractServerChannel {
 
         String originatorIpAddress = buffer.getString();
         int originatorPort = buffer.getInt();
-        LogUtils.info(log, "Receiving request for direct tcpip: hostToConnect={0}, portToConnect={1}, originatorIpAddress={2}, originatorPort={3}",
-                hostToConnect, portToConnect, originatorIpAddress, originatorPort);
+        log.info("Receiving request for direct tcpip: hostToConnect={}, portToConnect={}, originatorIpAddress={}, originatorPort={}",
+                new Object[] { hostToConnect, portToConnect, originatorIpAddress, originatorPort });
         connector = new NioSocketConnector();
         out = new ChannelOutputStream(this, remoteWindow, log, SshConstants.Message.SSH_MSG_CHANNEL_DATA);
         IoHandler handler = new IoHandlerAdapter() {
@@ -184,9 +183,9 @@ public class ChannelDirectTcpip extends AbstractServerChannel {
     }
 
     public void handleRequest(Buffer buffer) throws IOException {
-        LogUtils.info(log,"Received SSH_MSG_CHANNEL_REQUEST on channel {0}", id);
+        log.info("Received SSH_MSG_CHANNEL_REQUEST on channel {}", id);
         String type = buffer.getString();
-        LogUtils.info(log,"Received channel request: {0}", type);
+        log.info("Received channel request: {}", type);
         buffer = session.createBuffer(SshConstants.Message.SSH_MSG_CHANNEL_FAILURE, 0);
         buffer.putInt(recipient);
         session.writePacket(buffer);

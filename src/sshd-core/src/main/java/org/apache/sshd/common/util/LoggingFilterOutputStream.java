@@ -22,7 +22,7 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.apache.commons.logging.Log;
+import org.slf4j.Logger;
 
 /**
  * TODO Add javadoc
@@ -32,9 +32,9 @@ import org.apache.commons.logging.Log;
 public class LoggingFilterOutputStream extends FilterOutputStream {
 
     private final String msg;
-    private final Log log;
+    private final Logger log;
 
-    public LoggingFilterOutputStream(OutputStream out, String msg, Log log) {
+    public LoggingFilterOutputStream(OutputStream out, String msg, Logger log) {
         super(out);
         this.msg = msg;
         this.log = log;
@@ -50,7 +50,7 @@ public class LoggingFilterOutputStream extends FilterOutputStream {
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         if (log != null && log.isTraceEnabled()) {
-            log.trace(msg+" "+BufferUtils.printHex(b, off, len));
+            log.trace("{} {}", msg, BufferUtils.printHex(b, off, len));
         }
         out.write(b, off, len);
     }

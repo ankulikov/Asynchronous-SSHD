@@ -25,8 +25,7 @@ import java.io.OutputStream;
 import org.apache.sshd.common.SshConstants;
 import org.apache.sshd.common.SshException;
 import org.apache.sshd.common.util.Buffer;
-import org.apache.commons.logging.Log;
-import org.apache.sshd.common.util.LogUtils;
+import org.slf4j.Logger;
 
 /**
  * TODO Add javadoc
@@ -37,7 +36,7 @@ public class ChannelOutputStream extends OutputStream {
 
     private final AbstractChannel channel;
     private final Window remoteWindow;
-    private final Log log;
+    private final Logger log;
     private final SshConstants.Message cmd;
     private final byte[] b = new byte[1];
     private Buffer buffer;
@@ -45,7 +44,7 @@ public class ChannelOutputStream extends OutputStream {
     private int bufferLength;
     private int lastSize;
 
-    public ChannelOutputStream(AbstractChannel channel, Window remoteWindow, Log log, SshConstants.Message cmd) {
+    public ChannelOutputStream(AbstractChannel channel, Window remoteWindow, Logger log, SshConstants.Message cmd) {
         this.channel = channel;
         this.remoteWindow = remoteWindow;
         this.log = log;
@@ -117,7 +116,7 @@ public class ChannelOutputStream extends OutputStream {
                 }
                 lastSize = length;
                 remoteWindow.waitAndConsume(length);
-                LogUtils.debug(log,"Send {0} on channel {1}", cmd, channel.getId());
+                log.debug("Send {} on channel {}", cmd, channel.getId());
                 channel.getSession().writePacket(buf);
             }
         } catch (WindowClosedException e) {
